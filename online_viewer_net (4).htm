@@ -1,0 +1,354 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title> SLT GEAR ONE Smoke OS | Stage Controller</title>
+<style>
+:root{
+  --bg:#050508;
+  --panel:#0f0f14;
+  --panel-2:#16161e;
+  --accent:#ff2a6d;
+  --accent-2:#05d9e8;
+  --accent-dim:rgba(255,42,109,0.15);
+  --text:#e0e0e0;
+  --muted:#5a5a6e;
+  --success:#00f5d4;
+  --warn:#ffc857;
+  --danger:#ff2a6d;
+  --glass:rgba(255,255,255,0.03);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;}
+
+/* Canvas background */
+#smokeCanvas{position:fixed;inset:0;z-index:0;opacity:0.35;}
+
+/* Layout */
+.app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column;}
+.header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(180deg,rgba(15,15,20,0.95),transparent);}
+.logo{font-size:1.1rem;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:var(--accent);text-shadow:0 0 20px rgba(255,42,109,0.4);}
+.logo span{color:var(--text);font-weight:300;}
+.conn{font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:6px;}
+.conn::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);}
+
+/* Main Display */
+.display{padding:10px 20px 0;display:flex;gap:16px;justify-content:center;align-items:center;}
+.gauge-wrap{position:relative;width:180px;height:180px;flex-shrink:0;}
+.gauge-svg{transform:rotate(-90deg);width:100%;height:100%;}
+.gauge-bg{fill:none;stroke:#1a1a24;stroke-width:10;}
+.gauge-fill{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;stroke-dasharray:565;stroke-dashoffset:565;transition:stroke-dashoffset 0.08s linear;filter:drop-shadow(0 0 8px rgba(255,42,109,0.5));}
+.gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.gauge-time{font-size:2.6rem;font-weight:200;font-variant-numeric:tabular-nums;line-height:1;}
+.gauge-time small{font-size:0.9rem;color:var(--muted);}
+.gauge-label{font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;}
+.gauge-status{margin-top:6px;font-size:0.8rem;font-weight:700;letter-spacing:1px;display:flex;align-items:center;gap:6px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:all 0.3s;}
+.dot.on{background:var(--success);box-shadow:0 0 10px var(--success);}
+.dot.smoke{background:var(--danger);box-shadow:0 0 14px var(--danger);animation:pulse 0.5s infinite;}
+.dot.cool{background:var(--warn);box-shadow:0 0 10px var(--warn);}
+
+/* Vertical meter */
+.v-meter{height:140px;width:24px;background:#111;border-radius:12px;position:relative;overflow:hidden;border:1px solid #222;}
+.v-fill{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--accent),var(--accent-2));border-radius:0 0 12px 12px;transition:height 0.05s linear;box-shadow:0 0 12px rgba(5,217,232,0.3);}
+.v-ticks{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;padding:6px 0;align-items:center;pointer-events:none;}
+.v-tick{width:8px;height:1px;background:rgba(255,255,255,0.1);}
+
+/* Quick Actions */
+.quick{display:flex;gap:8px;padding:12px 20px;justify-content:center;}
+.q-btn{flex:1;max-width:80px;padding:10px 4px;border:1px solid #222;border-radius:10px;background:var(--panel);color:var(--text);font-size:0.75rem;font-weight:700;cursor:pointer;transition:all 0.2s;text-align:center;}
+.q-btn:hover:not(:disabled){border-color:var(--accent);background:var(--panel-2);}
+.q-btn:disabled{opacity:0.3;cursor:not-allowed;}
+.q-btn .dur{display:block;font-size:1.1rem;font-weight:300;margin-bottom:2px;color:var(--accent-2);}
+
+/* Emergency */
+.e-stop{width:calc(100% - 40px);margin:0 20px 12px;padding:14px;border:none;border-radius:12px;background:linear-gradient(135deg,#ff2a6d,#cc1144);color:#fff;font-size:0.9rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;cursor:pointer;box-shadow:0 4px 20px rgba(255,42,109,0.3);transition:0.2s;}
+.e-stop:active{transform:scale(0.98);}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;padding:0 20px 8px;border-bottom:1px solid #1a1a24;}
+.tab{flex:1;padding:10px 4px;border:none;border-radius:8px 8px 0 0;background:transparent;color:var(--muted);font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;transition:0.2s;border-bottom:2px solid transparent;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--glass);}
+.tab-content{flex:1;overflow-y:auto;padding:16px 20px;display:none;}
+.tab-content.active{display:block;}
+
+/* Manual Tab */
+.hold-btn{width:100%;padding:32px;border:none;border-radius:16px;background:linear-gradient(135deg,var(--accent),#cc1144);color:#fff;font-size:1.2rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;cursor:pointer;position:relative;overflow:hidden;box-shadow:0 8px 32px rgba(255,42,109,0.25),inset 0 1px 0 rgba(255,255,255,0.2);transition:0.15s;margin-bottom:12px;}
+.hold-btn:active{transform:scale(0.97);}
+.hold-btn:disabled{background:#1a1a24;color:var(--muted);box-shadow:none;cursor:not-allowed;}
+.hold-btn.smoking{background:linear-gradient(135deg,var(--success),#00b894);box-shadow:0 8px 32px rgba(0,245,212,0.25);}
+.hold-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.12),transparent 50%);pointer-events:none;}
+
+/* Shows Tab */
+.show-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+.show-card{padding:14px;border:1px solid #222;border-radius:12px;background:var(--panel);cursor:pointer;transition:0.2s;position:relative;overflow:hidden;}
+.show-card:hover:not(.running){border-color:var(--accent);background:var(--panel-2);}
+.show-card.running{border-color:var(--success);box-shadow:0 0 20px rgba(0,245,212,0.1);}
+.show-card.running::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--success);}
+.show-name{font-size:0.9rem;font-weight:700;margin-bottom:2px;}
+.show-desc{font-size:0.7rem;color:var(--muted);}
+.show-play{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.8rem;color:#fff;}
+
+/* Composer */
+.comp-controls{display:flex;gap:8px;margin-bottom:12px;}
+.comp-btn{flex:1;padding:10px;border:1px solid #222;border-radius:8px;background:var(--panel);color:var(--text);font-size:0.8rem;font-weight:700;cursor:pointer;transition:0.2s;}
+.comp-btn:hover{border-color:var(--accent-2);color:var(--accent-2);}
+.comp-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.comp-btn.primary:hover{background:#ff4a7f;}
+.step-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;padding-right:4px;}
+.step-row{display:flex;gap:8px;align-items:center;padding:10px;border:1px solid #222;border-radius:8px;background:var(--panel);animation:slideIn 0.3s;}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px);}}
+.step-num{width:24px;height:24px;border-radius:6px;background:#222;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;color:var(--muted);}
+.step-row.active .step-num{background:var(--accent);color:#fff;}
+.step-row.active{border-color:var(--accent);}
+.step-input{flex:1;background:#0a0a0f;border:1px solid #222;border-radius:6px;padding:6px 8px;color:var(--text);font-size:0.8rem;width:0;}
+.step-input:focus{outline:none;border-color:var(--accent-2);}
+.step-x{width:28px;height:28px;border:none;border-radius:6px;background:#222;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;}
+.step-x:hover{background:var(--danger);color:#fff;}
+.bank-row{display:flex;gap:6px;margin-bottom:12px;}
+.bank-btn{flex:1;padding:8px;border:1px solid #222;border-radius:6px;background:var(--panel);color:var(--muted);font-size:0.75rem;font-weight:700;cursor:pointer;transition:0.2s;}
+.bank-btn.active{border-color:var(--accent-2);color:var(--accent-2);background:rgba(5,217,232,0.1);}
+
+/* BPM */
+.bpm-display{text-align:center;padding:20px;}
+.bpm-number{font-size:4rem;font-weight:200;color:var(--accent-2);line-height:1;text-shadow:0 0 30px rgba(5,217,232,0.3);}
+.bpm-label{font-size:0.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:3px;margin-top:4px;}
+.tap-btn{width:100%;padding:40px;border:2px solid var(--accent-2);border-radius:16px;background:transparent;color:var(--accent-2);font-size:1.3rem;font-weight:800;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:0.1s;margin:16px 0;box-shadow:0 0 30px rgba(5,217,232,0.1);}
+.tap-btn:active{background:rgba(5,217,232,0.1);transform:scale(0.97);}
+.bpm-options{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+.bpm-opt{padding:8px 16px;border:1px solid #222;border-radius:20px;background:var(--panel);color:var(--muted);font-size:0.8rem;cursor:pointer;transition:0.2s;}
+.bpm-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+.bpm-bar{height:4px;background:#1a1a24;border-radius:2px;margin:12px 20px;overflow:hidden;}
+.bpm-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:2px;transition:width 0.1s linear;}
+
+/* Settings */
+.set-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #1a1a24;}
+.set-label{font-size:0.85rem;}
+.set-val{font-size:0.85rem;color:var(--accent-2);font-weight:700;}
+.set-slider{width:100%;margin-top:8px;-webkit-appearance:none;height:4px;border-radius:2px;background:#222;outline:none;}
+.set-slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 10px rgba(255,42,109,0.5);}
+
+/* Toast */
+.toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-80px);background:var(--panel);border:1px solid #333;padding:12px 24px;border-radius:12px;font-size:0.85rem;z-index:200;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 8px 32px rgba(0,0,0,0.5);white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.err{border-color:var(--danger);color:var(--danger);}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+
+/* Pulse */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+
+<canvas id="smokeCanvas"></canvas>
+
+<div class="app">
+  <div class="header">
+    <div class="logo"> slt gear one Smoke<span> OS</span></div>
+    <div class="conn" id="connStatus">Online</div>
+  </div>
+
+  <div class="display">
+    <div class="gauge-wrap">
+      <svg class="gauge-svg" viewBox="0 0 180 180">
+        <circle class="gauge-bg" cx="90" cy="90" r="90"/>
+        <circle class="gauge-fill" id="gaugeFill" cx="90" cy="90" r="90"/>
+      </svg>
+      <div class="gauge-center">
+        <div class="gauge-label">Duration</div>
+        <div class="gauge-time" id="gTime">0.0<small>s</small></div>
+        <div class="gauge-status" id="gStatus">
+          <span class="dot" id="gDot"></span>
+          <span id="gLabel">Standby</span>
+        </div>
+      </div>
+    </div>
+    <div class="v-meter">
+      <div class="v-fill" id="vFill" style="height:0%"></div>
+      <div class="v-ticks">
+        <div class="v-tick"></div><div class="v-tick"></div><div class="v-tick"></div>
+        <div class="v-tick"></div><div class="v-tick"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="quick">
+    <button class="q-btn" onclick="preset(500)" id="q1"><span class="dur">0.5s</span>Flash</button>
+    <button class="q-btn" onclick="preset(1000)" id="q2"><span class="dur">1s</span>Short</button>
+    <button class="q-btn" onclick="preset(3000)" id="q3"><span class="dur">3s</span>Med</button>
+    <button class="q-btn" onclick="preset(5000)" id="q4"><span class="dur">5s</span>Max</button>
+  </div>
+
+  <button class="e-stop" onclick="blackout()">⏹ Blackout / Emergency Stop</button>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('manual',this)">Manual</button>
+    <button class="tab" onclick="switchTab('shows',this)">Shows</button>
+    <button class="tab" onclick="switchTab('composer',this)">Composer</button>
+    <button class="tab" onclick="switchTab('bpm',this)">BPM</button>
+    <button class="tab" onclick="switchTab('settings',this)">Setup</button>
+  </div>
+
+  <div class="tab-content active" id="tab-manual">
+    <button class="hold-btn" id="holdBtn"
+      onmousedown="holdStart(event)" onmouseup="holdEnd(event)"
+      onmouseleave="holdEnd(event)"
+      ontouchstart="holdStart(event)" ontouchend="holdEnd(event)" ontouchcancel="holdEnd(event)">
+      🔥 Hold to Smoke
+    </button>
+    <p style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:8px;">Spacebar to hold • S to stop</p>
+  </div>
+
+  <div class="tab-content" id="tab-shows">
+    <div class="show-grid" id="showGrid"></div>
+    <p style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:12px;">Shows respect safety limits automatically</p>
+  </div>
+
+  <div class="tab-content" id="tab-composer">
+    <div class="bank-row">
+      <button class="bank-btn active" onclick="loadBank(0,this)">Bank A</button>
+      <button class="bank-btn" onclick="loadBank(1,this)">Bank B</button>
+      <button class="bank-btn" onclick="loadBank(2,this)">Bank C</button>
+      <button class="bank-btn" onclick="loadBank(3,this)">Bank D</button>
+    </div>
+    <div class="comp-controls">
+      <button class="comp-btn" onclick="addStep()">+ Add Step</button>
+      <button class="comp-btn" onclick="clearSteps()">Clear</button>
+      <button class="comp-btn primary" onclick="playCustom()">▶ Play</button>
+      <button class="comp-btn" onclick="toggleLoop()" id="loopBtn">Loop: OFF</button>
+    </div>
+    <div class="step-list" id="stepList"></div>
+  </div>
+
+  <div class="tab-content" id="tab-bpm">
+    <div class="bpm-display">
+      <div class="bpm-number" id="bpmNum">--</div>
+      <div class="bpm-label">BPM</div>
+    </div>
+    <button class="tap-btn" id="tapBtn" onmousedown="tapBpm(event)" ontouchstart="tapBpm(event)">TAP TEMPO</button>
+    <div class="bpm-bar"><div class="bpm-fill" id="bpmFill"></div></div>
+    <div class="bpm-options">
+      <button class="bpm-opt active" onclick="setBpmDiv(1,this)">1/1 Beat</button>
+      <button class="bpm-opt" onclick="setBpmDiv(2,this)">1/2 Beat</button>
+      <button class="bpm-opt" onclick="setBpmDiv(4,this)">1/4 Beat</button>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:0.75rem;margin-top:12px;">Tap 4+ times to sync • B to tap from keyboard</p>
+  </div>
+
+  <div class="tab-content" id="tab-settings">
+    <div class="set-row"><span class="set-label">Max Burst</span><span class="set-val" id="setMaxVal">5.0s</span></div>
+    <input type="range" class="set-slider" min="500" max="10000" step="500" value="5000" id="setMax" oninput="updateSetting('max',this.value)">
+    
+    <div class="set-row"><span class="set-label">Cooldown</span><span class="set-val" id="setCoolVal">3.0s</span></div>
+    <input type="range" class="set-slider" min="0" max="10000" step="500" value="3000" id="setCool" oninput="updateSetting('cool',this.value)">
+    
+    <div class="set-row"><span class="set-label">Relay Logic</span><span class="set-val">Active HIGH</span></div>
+    <div class="set-row"><span class="set-label">Firmware</span><span class="set-val">SmokeOS v2.0</span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== CANVAS SMOKE ====================
+const cvs=document.getElementById('smokeCanvas'),ctx=cvs.getContext('2d');
+let W,H,particles=[];
+function resize(){W=cvs.width=innerWidth;H=cvs.height=innerHeight;}
+window.addEventListener('resize',resize);resize();
+class P{constructor(){this.reset();}
+reset(){this.x=Math.random()*W;this.y=H+20;this.vx=(Math.random()-0.5)*0.5;this.vy=-Math.random()*1.5-0.5;this.r=Math.random()*60+20;this.life=Math.random()*200+100;this.maxLife=this.life;this.a=Math.random()*0.15+0.05;}
+update(){this.x+=this.vx;this.y+=this.vy;this.life--;this.r+=0.15;if(this.life<=0)this.reset();}
+draw(){const op=(this.life/this.maxLife)*this.a;ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);ctx.fillStyle=`rgba(200,210,230,${op})`;ctx.fill();}}
+for(let i=0;i<30;i++)particles.push(new P());
+function anim(){ctx.clearRect(0,0,W,H);particles.forEach(p=>{p.update();p.draw();});requestAnimationFrame(anim);}
+anim();
+
+// ==================== STATE ====================
+const CIRC=2*Math.PI*90;
+let holdInt,holdT0,coolInt;
+let isHolding=false,isRunning=false,looping=false;
+let currentBank=0;
+let bpm=0,bpmDiv=1,taps=[],bpmInt,bpmPhase=0;
+let customSeq=[[1000,500],[2000,1000],[1000,500]];
+const banks=[[[1000,500],[2000,1000],[1000,500]],[[500,200],[500,200],[500,200],[2000,1000]],[[300,100],[300,100],[300,100],[300,100],[300,100],[300,100],[2000,500]],[[2000,500],[1000,500],[3000,1000]]];
+
+const SHOWS={
+  heartbeat:{name:'Heartbeat',desc:'Double pulse loop',loop:true,seq:[[200,150],[200,800]]},
+  crescendo:{name:'Crescendo',desc:'Building to climax',loop:false,seq:[[500,1000],[1000,1000],[2000,1000],[3000,1000],[4000,0]]},
+  strobe:{name:'Strobe',desc:'Rapid fire bursts',loop:true,seq:[[80,80],[80,80],[80,80],[80,400]]},
+  chaos:{name:'Chaos',desc:'Random unpredictable',loop:true,seq:'random'},
+  sos:{name:'SOS',desc:'Morse distress signal',loop:true,seq:[[200,200],[200,200],[200,600],[600,200],[600,200],[600,600],[200,200],[200,200],[200,2000]]},
+  chase:{name:'Chase',desc:'Running short bursts',loop:false,seq:[[300,200],[300,200],[300,200],[300,200],[300,200],[300,200],[2000,0]]}
+};
+
+// ==================== UI HELPERS ====================
+function $(id){return document.getElementById(id);}
+function toast(msg,err){const t=$('toast');t.textContent=msg;t.className='toast'+(err?' err':'')+' show';setTimeout(()=>t.classList.remove('show'),2200);}
+function setGauge(p){$('gaugeFill').style.strokeDashoffset=CIRC-(p/100)*CIRC;}
+function setV(h){$('vFill').style.height=h+'%';}
+function setStatus(st,txt){$('gDot').className='dot '+st;$('gLabel').textContent=txt;}
+function setTime(s){$('gTime').innerHTML=(typeof s==='number'?s.toFixed(1):s)+'<small>s</small>';}
+function setControls(en){$('holdBtn').disabled=!en;document.querySelectorAll('.q-btn').forEach(b=>b.disabled=!en);document.querySelectorAll('.show-card').forEach(c=>c.style.pointerEvents=en?'':'none');document.querySelectorAll('.comp-btn').forEach(b=>{if(!b.classList.contains('primary'))b.disabled=!en;});}
+
+// ==================== RELAY API ====================
+function relayOn(){return fetch('/on').then(r=>r.json());}
+function relayOff(){return fetch('/off').then(r=>r.json());}
+
+// ==================== MANUAL ====================
+function holdStart(e){if(e)e.preventDefault();if(isHolding||$('holdBtn').disabled)return;isHolding=true;$('holdBtn').classList.add('smoking');$('holdBtn').innerHTML='🔥 SMOKING...';relayOn().then(d=>{if(d.error){toast(d.error,1);resetHold();return;}setStatus('smoke','Smoking');holdT0=Date.now();holdInt=setInterval(()=>{const e=Date.now()-holdT0,s=e/1000;setTime(s);setGauge(Math.min(s/5*100,100));setV(Math.min(s/5*100,100));},50);});}
+function holdEnd(e){if(e)e.preventDefault();if(!isHolding)return;resetHold();relayOff().then(()=>{setStatus('cool','Cooldown');setGauge(0);setV(0);setTime(0);setControls(false);startCooldown();});}
+function resetHold(){isHolding=false;clearInterval(holdInt);const b=$('holdBtn');b.classList.remove('smoking');b.innerHTML='🔥 Hold to Smoke';}
+
+function preset(ms){if($('q1').disabled)return;setControls(false);relayOn().then(d=>{if(d.error){toast(d.error,1);setControls(true);return;}setStatus('smoke','Burst '+ms/1000+'s');let e=0;const iv=setInterval(()=>{e+=50;const s=e/1000;setTime(s);setGauge(e/ms*100);setV(e/ms*100);if(e>=ms){clearInterval(iv);relayOff().then(()=>{setGauge(0);setV(0);setTime(0);setStatus('cool','Cooldown');startCooldown();});}},50);});}
+
+function blackout(){relayOff();resetHold();stopShow();stopBpm();setStatus('on','Stopped');setGauge(0);setV(0);setTime(0);setControls(true);toast('Blackout executed');}
+
+function startCooldown(){let r=3;const iv=setInterval(()=>{r-=0.1;$('gLabel').textContent='Cooldown '+Math.max(0,r).toFixed(1)+'s';if(r<=0){clearInterval(iv);setStatus('on','Ready');setControls(true);}},100);}
+
+// ==================== SHOWS ====================
+function renderShows(){const g=$('showGrid');g.innerHTML='';Object.entries(SHOWS).forEach(([k,v])=>{const d=document.createElement('div');d.className='show-card';d.id='show-'+k;d.innerHTML=`<div class="show-name">${v.name}</div><div class="show-desc">${v.desc}</div><div class="show-play">▶</div>`;d.onclick=()=>runShow(k);g.appendChild(d);});}
+renderShows();
+
+let showAbort=null;
+function runShow(key){if($('show-'+key).classList.contains('running')){showAbort&&showAbort();return;}const s=SHOWS[key];if(!s)return;setControls(false);document.querySelectorAll('.show-card').forEach(c=>c.classList.remove('running'));$('show-'+key).classList.add('running');toast('Show: '+s.name);let seq=s.seq==='random'?generateRandom():[...s.seq];let idx=0,aborted=false;showAbort=()=>{aborted=true;};function next(){if(aborted)return finish();if(idx>=seq.length){if(s.loop&&!aborted){idx=0;if(s.seq==='random')seq=generateRandom();}else return finish();}const [dur,gap]=seq[idx];$('show-'+key).querySelector('.show-name').textContent=`${s.name} (${idx+1}/${seq.length})`;relayOn().then(()=>{setStatus('smoke',s.name);let e=0;const iv=setInterval(()=>{if(aborted){clearInterval(iv);return;}e+=50;setTime(e/1000);setGauge(Math.min(e/dur*100,100));setV(Math.min(e/dur*100,100));if(e>=dur){clearInterval(iv);relayOff().then(()=>{idx++;setGauge(0);setV(0);setTime(0);setStatus('cool','Next...');setTimeout(next,gap);});}},50);});}next();function finish(){relayOff();document.querySelectorAll('.show-card').forEach(c=>c.classList.remove('running'));renderShows();setStatus('on','Ready');setControls(true);showAbort=null;}}
+function generateRandom(){const out=[];for(let i=0;i<5+Math.random()*5;i++)out.push([200+Math.random()*2800|0,200+Math.random()*1500|0]);return out;}
+function stopShow(){if(showAbort){showAbort();showAbort=null;}}
+
+// ==================== COMPOSER ====================
+function loadBank(n,btn){currentBank=n;customSeq=banks[n].map(x=>[...x]);if(btn){document.querySelectorAll('.bank-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}renderSteps();}
+function renderSteps(){const list=$('stepList');list.innerHTML='';customSeq.forEach((step,i)=>{const row=document.createElement('div');row.className='step-row';row.id='step-'+i;row.innerHTML=`<div class="step-num">${i+1}</div><input class="step-input" type="number" value="${step[0]}" min="100" max="5000" step="100" onchange="customSeq[${i}][0]=parseInt(this.value)"><span style="color:var(--muted);font-size:0.75rem;">ms</span><input class="step-input" type="number" value="${step[1]}" min="0" max="5000" step="100" onchange="customSeq[${i}][1]=parseInt(this.value)"><span style="color:var(--muted);font-size:0.75rem;">gap</span><button class="step-x" onclick="removeStep(${i})">×</button>`;list.appendChild(row);});}
+function addStep(){customSeq.push([1000,500]);renderSteps();}
+function removeStep(i){customSeq.splice(i,1);renderSteps();}
+function clearSteps(){customSeq=[];renderSteps();}
+function toggleLoop(){looping=!looping;$('loopBtn').textContent='Loop: '+(looping?'ON':'OFF');$("loopBtn").style.color=looping?'var(--accent)':'var(--text)';}
+function playCustom(){if(customSeq.length===0){toast('Add steps first',1);return;}setControls(false);let idx=0,aborted=false;showAbort=()=>{aborted=true;};function next(){if(aborted)return done();if(idx>=customSeq.length){if(looping){idx=0;}else return done();}const [dur,gap]=customSeq[idx];const row=$('step-'+idx);if(row)row.classList.add('active');relayOn().then(()=>{setStatus('smoke','Custom '+(idx+1));let e=0;const iv=setInterval(()=>{if(aborted){clearInterval(iv);return;}e+=50;setTime(e/1000);setGauge(e/dur*100);setV(e/dur*100);if(e>=dur){clearInterval(iv);relayOff().then(()=>{if(row)row.classList.remove('active');idx++;setGauge(0);setV(0);setTime(0);setStatus('cool','Next...');setTimeout(next,gap);});}},50);});}next();function done(){relayOff();setStatus('on','Done');setControls(true);showAbort=null;}}
+loadBank(0);
+
+// ==================== BPM ====================
+function tapBpm(e){if(e)e.preventDefault();const now=Date.now();taps=taps.filter(t=>now-t<2000);taps.push(now);if(taps.length>1){const intervals=[];for(let i=1;i<taps.length;i++)intervals.push(taps[i]-taps[i-1]);const avg=intervals.reduce((a,b)=>a+b,0)/intervals.length;bpm=Math.round(60000/avg);$('bpmNum').textContent=bpm;startBpm();}else{$('bpmNum').textContent='--';}}
+function setBpmDiv(d,btn){bpmDiv=d;document.querySelectorAll('.bpm-opt').forEach(b=>b.classList.remove('active'));btn.classList.add('active');if(bpm>0)startBpm();}
+function startBpm(){stopBpm();if(bpm<=0)return;const beatMs=60000/bpm;const dur=beatMs/bpmDiv;setControls(false);let running=true;showAbort=()=>{running=false;};function tick(){if(!running)return;relayOn().then(()=>{setStatus('smoke','BPM '+bpm);let e=0;const iv=setInterval(()=>{if(!running){clearInterval(iv);return;}e+=50;setTime(e/1000);setGauge(e/dur*100);setV(e/dur*100);$('bpmFill').style.width=(e/dur*100)+'%';if(e>=dur){clearInterval(iv);relayOff().then(()=>{setGauge(0);setV(0);setTime(0);$('bpmFill').style.width='0%';});}},50);});bpmPhase=setTimeout(tick,beatMs);}tick();}
+function stopBpm(){clearTimeout(bpmPhase);$('bpmFill').style.width='0%';}
+
+// ==================== SETTINGS ====================
+function updateSetting(k,v){v=parseInt(v);if(k==='max'){MAX_BURST_MS=v;$('setMaxVal').textContent=(v/1000).toFixed(1)+'s';}else{COOLDOWN_MS=v;$('setCoolVal').textContent=(v/1000).toFixed(1)+'s';}}
+
+// ==================== TABS ====================
+function switchTab(id,btn){document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));$(id==='manual'?'tab-manual':'tab-'+id).classList.add('active');btn.classList.add('active');}
+
+// ==================== KEYBOARD ====================
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();holdStart();}
+  if(e.code==='KeyS')blackout();
+  if(e.code==='KeyB')tapBpm();
+});
+document.addEventListener('keyup',e=>{if(e.code==='Space')holdEnd();});
+
+// ==================== INIT ====================
+setStatus('on','Ready');setGauge(0);
+</script>
+</body>
+</html>
